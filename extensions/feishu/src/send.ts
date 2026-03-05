@@ -396,7 +396,36 @@ export async function sendMarkdownCardFeishu(params: {
     cardText = buildMentionedCardContent(mentions, text);
   }
   const card = buildMarkdownCard(cardText);
-  return sendCardFeishu({ cfg, to, card, replyToMessageId, replyInThread, accountId });
+  try {
+    return await sendCardFeishu({ cfg, to, card, replyToMessageId, replyInThread, accountId });
+  } catch (error: unknown) {
+    // Fallback to plain post message when card content exceeds limits
+    // (e.g. too many tables: error code 230099 "card table number over limit")
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const errResponse = (error as { response?: { data?: { code?: number; msg?: string } } })
+      ?.response?.data;
+    const errCode = errResponse?.code;
+    const errResponseMsg = errResponse?.msg ?? "";
+    if (
+      errCode === 230099 ||
+      errMsg.includes("230099") ||
+      errMsg.includes("over limit") ||
+      errMsg.includes("over_limit") ||
+      errResponseMsg.includes("over limit") ||
+      errResponseMsg.includes("over_limit")
+    ) {
+      return sendMessageFeishu({
+        cfg,
+        to,
+        text,
+        replyToMessageId,
+        replyInThread,
+        mentions,
+        accountId,
+      });
+    }
+    throw error;
+  }
 }
 
 /**
